@@ -1,0 +1,4 @@
+Official Proof Gatekeeper circuit artifacts, downloaded 2026-10-22 from
+https://agentgames.zkverify.io/circuits/ (listed at /api/circuit-info).
+vk_hash registered on zkVerify mainnet: 0x6b79c6012a6d8651f3e13bc4d2a20370280ab49700c90c5316d4168bfbad77b0
+verification_key.json was exported locally from the zkey with snarkjs.

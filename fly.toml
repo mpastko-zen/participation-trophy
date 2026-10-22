@@ -1,0 +1,42 @@
+# Fly.io config. One always-on machine with a persistent volume for the SQLite state.
+#   fly launch --no-deploy --copy-config   (pick a name/region)
+#   fly volumes create agent_data --size 1
+#   fly secrets set AGENT_GAMES_HMAC_SECRET=... VFY_STRATEGY_SALT=... KURIER_API_KEY=...
+#   fly deploy
+app = "participation-trophy"
+primary_region = "sin"
+
+[build]
+
+[env]
+  PORT = "3000"
+  DATA_DIR = "/data"
+  AGENT_PATH = "/agent"
+  LOG_LEVEL = "info"
+  VFY_WASM = "build/circuits/vfy-policy/vfy-policy.wasm"
+  VFY_ZKEY = "build/circuits/vfy-policy/vfy-policy_final.zkey"
+  GATEKEEPER_WASM = "build/circuits/gatekeeper/gatekeeper.wasm"
+  GATEKEEPER_ZKEY = "build/circuits/gatekeeper/gatekeeper_final.zkey"
+  GATEKEEPER_VK_HASH = "0x6b79c6012a6d8651f3e13bc4d2a20370280ab49700c90c5316d4168bfbad77b0"
+
+[[mounts]]
+  source = "agent_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "off"     # the platform forfeits tasks delivered to a sleeping agent
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

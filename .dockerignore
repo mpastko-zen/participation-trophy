@@ -1,0 +1,8 @@
+node_modules
+dist
+data
+.env
+.git
+*.log
+build/circuits/*/pot*.ptau
+build/circuits/*/*_0000.zkey

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+data/
+build/
+.env
+*.ptau
+*.zkey
+*.wasm
+*.r1cs
+*.sym
+
+# Official competition circuit artifacts are part of the deployable image
+!build/
+!build/circuits/gatekeeper/
+!build/circuits/gatekeeper/*
+.DS_Store
