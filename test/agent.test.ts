@@ -121,10 +121,10 @@ test('vfy competition turn: exact echo, EXTRACT 10, correct hash, timestamp and 
   assert.notEqual(next.json.idempotencyKey, r.json.idempotencyKey);
 });
 
-test('vfy practice turn: minimal strict shape, no competition-only fields', async () => {
+test('vfy practice turn: same required fields as competition (timestamp and idempotency key included)', async () => {
   const r = await post(vfyEnvelope('practice', randomUUID(), 1, '100', '100'));
   assert.equal(r.status, 200);
-  assert.deepEqual(Object.keys(r.json).sort(), ['action', 'matchId', 'policyProof', 'turn']);
+  assert.deepEqual(Object.keys(r.json).sort(), ['action', 'agentTimestamp', 'idempotencyKey', 'matchId', 'policyProof', 'turn']);
   assert.deepEqual(Object.keys(r.json.policyProof).sort(), ['circuitVersion', 'publicInputsHash']);
   assert.match(r.json.policyProof.publicInputsHash, /^0x[0-9a-f]{64}$/);
 });

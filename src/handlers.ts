@@ -126,11 +126,16 @@ export class Handlers {
     });
 
     const policyProof: Record<string, unknown> = { circuitVersion, publicInputsHash: hash };
-    const body: Record<string, unknown> = { matchId: task.matchId, turn: task.turn, action, policyProof };
-    if (mode === 'competition') {
-      body.agentTimestamp = new Date().toISOString();
-      body.idempotencyKey = randomUUID();
-    }
+    // The protocol schema requires agentTimestamp and idempotencyKey on every turn, practice included
+    // (confirmed by a practice diagnostic on 2026-10-23: "expected string, received undefined").
+    const body: Record<string, unknown> = {
+      matchId: task.matchId,
+      turn: task.turn,
+      action,
+      policyProof,
+      agentTimestamp: new Date().toISOString(),
+      idempotencyKey: randomUUID(),
+    };
 
     const v = this.config.vfy;
     // The circuit can only prove a turn against *our* committed strategy. If the platform froze a
@@ -183,7 +188,8 @@ export class Handlers {
       turn: payload.turn,
       action: { type: 'HOLD' },
       policyProof: { circuitVersion: 'v1', publicInputsHash: '0x' + '0'.repeat(64) },
-      ...(payload.mode === 'practice' ? {} : { agentTimestamp: new Date().toISOString(), idempotencyKey: randomUUID() }),
+      agentTimestamp: new Date().toISOString(),
+      idempotencyKey: randomUUID(),
     };
   }
 }
