@@ -6,6 +6,8 @@ import { generateRoundTasks, gatekeeperEnvelope } from '../test/fixtures/traps.j
 import { publicInputsHash } from '../src/vfy/hash.js';
 import { resolveTurn } from '../src/vfy/strategy.js';
 import { deriveSalt, strategyCommitment } from '../src/vfy/commitment.js';
+import { loadConfig } from '../src/config.js';
+import { strategyParamsFromConfig } from '../src/vfy/strategy.js';
 import { readFile } from 'node:fs/promises';
 
 const url = process.argv[2] ?? `http://localhost:${process.env.PORT ?? 3000}${process.env.AGENT_PATH ?? '/agent'}`;
@@ -65,7 +67,7 @@ console.log('\n== Gatekeeper retry: same task id twice must return the same body
 console.log('\n== Steal the VFY: practice turn');
 {
   const matchId = randomUUID();
-  const r = await post({ protocolVersion: 'v1', eventId: 'steal-the-vfy', mode: 'practice', matchId, turn: 1, issuedAt: new Date().toISOString(), deadlineAt: new Date(Date.now() + 60_000).toISOString(), state: { selfBalance: '100', opponentBalance: '100', selfFortifiedUntilTurn: null, opponentFortifiedUntilTurn: null, priorTurnHash: '0x' + '0'.repeat(64) }, resolverVersion: 'v1-draft', nonce: randomUUID() });
+  const r = await post({ protocolVersion: 'v1', eventId: 'steal-the-vfy', mode: 'practice', matchId, turn: 1, issuedAt: new Date().toISOString(), deadlineAt: new Date(Date.now() + 60_000).toISOString(), state: { selfBalance: '100', opponentBalance: '100', selfFortifiedUntilTurn: null, opponentFortifiedUntilTurn: null, priorTurnHash: '0x' + '0'.repeat(64) }, resolverVersion: 'v1', nonce: randomUUID() });
   ok(r.status === 200 && r.json?.matchId === matchId && r.json?.turn === 1 && r.json?.action?.type, `practice ${JSON.stringify(r.json)} (${r.ms}ms)`);
 }
 
@@ -73,10 +75,7 @@ console.log('\n== Steal the VFY: 20-turn competition match vs an always-EXTRACT 
 {
   const matchId = randomUUID();
   // The platform echoes back the commitment we registered; reproduce it from the same env.
-  const commitment = await strategyCommitment(
-    { extractAmount: Number(process.env.VFY_EXTRACT_AMOUNT ?? 10), holdWhenOpponentEmpty: 1 },
-    deriveSalt(process.env.VFY_STRATEGY_SALT || secret),
-  );
+  const commitment = await strategyCommitment(strategyParamsFromConfig(loadConfig().vfy), deriveSalt(process.env.VFY_STRATEGY_SALT || secret));
   const vkPath = process.env.SIM_VFY_VK; // optional: verify returned proofs against this verification key
   const vk = vkPath ? JSON.parse(await readFile(vkPath, 'utf8')) : null;
   const snarkjs = vk ? await import('snarkjs') : null;
@@ -85,7 +84,7 @@ console.log('\n== Steal the VFY: 20-turn competition match vs an always-EXTRACT 
   let opp = 100;
   let maxMs = 0;
   for (let turn = 1; turn <= 20; turn++) {
-    const r = await post({ protocolVersion: 'v1', eventId: 'steal-the-vfy', mode: 'competition', matchId, turn, issuedAt: new Date().toISOString(), deadlineAt: new Date(Date.now() + 60_000).toISOString(), state: { selfBalance: String(self), opponentBalance: String(opp), selfFortifiedUntilTurn: null, opponentFortifiedUntilTurn: null }, strategyCommitment: { hash: commitment }, resolverVersion: 'v1-draft', nonce: randomUUID() });
+    const r = await post({ protocolVersion: 'v1', eventId: 'steal-the-vfy', mode: 'competition', matchId, turn, issuedAt: new Date().toISOString(), deadlineAt: new Date(Date.now() + 60_000).toISOString(), state: { selfBalance: String(self), opponentBalance: String(opp), selfFortifiedUntilTurn: null, opponentFortifiedUntilTurn: null }, strategyCommitment: { hash: commitment }, resolverVersion: 'v1', nonce: randomUUID() });
     maxMs = Math.max(maxMs, r.ms);
     const j = r.json;
     const expectedHash = publicInputsHash({ commitment, matchId, turn, selfBalance: self, opponentBalance: opp, action: j.action, circuitVersion: j.policyProof.circuitVersion });

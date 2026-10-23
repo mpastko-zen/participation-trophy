@@ -58,15 +58,21 @@ export function loadConfig() {
     },
 
     vfy: {
-      circuitVersion: str('VFY_CIRCUIT_VERSION', 'v1-draft'),
+      // "v1" per /build (packed as the integer 1 into the circuit and publicInputsHash).
+      circuitVersion: str('VFY_CIRCUIT_VERSION', 'v1'),
+      // Official policy circuit artifacts (build/circuits/vfy-policy-official, see SOURCE.txt there).
       wasm: str('VFY_WASM'),
       zkey: str('VFY_ZKEY'),
       vkHash: str('VFY_VK_HASH'),
       includeProofInResponse: bool('VFY_INCLUDE_PROOF', true),
       // Private salt for the strategy commitment. Keep it stable across deploys.
       strategySalt: str('VFY_STRATEGY_SALT'),
-      extractAmount: int('VFY_EXTRACT_AMOUNT', 10),
-      holdWhenOpponentEmpty: bool('VFY_HOLD_WHEN_OPPONENT_EMPTY', true),
+      // Committed strategy = the official circuit's strategyParams[0..3] (see src/vfy/strategy.ts).
+      // Changing any of these changes the commitment: re-run `npm run commitment` and re-register it.
+      extractAmount: int('VFY_EXTRACT_AMOUNT', 10), // params[0], 1..10
+      fortifyBelow: int('VFY_FORTIFY_BELOW', 0), // params[1]: FORTIFY while selfBalance < this
+      holdWhenOpponentAtMost: int('VFY_HOLD_WHEN_OPPONENT_AT_MOST', 0), // params[2]: HOLD while opponentBalance <= this
+      alwaysHold: bool('VFY_ALWAYS_HOLD', false), // params[3]
     },
 
     kurier: {

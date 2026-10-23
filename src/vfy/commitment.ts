@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { strategyParamsToSignals, type StrategyParams } from './strategy.js';
 
 /**
- * Strategy commitment C = Poseidon(params..., salt), rendered as 0x + 64 hex chars.
- * This is what gets registered under Dashboard -> My Agents -> Edit agent before Swiss Round 1.
+ * Strategy commitment C = Poseidon(strategyParams[0..7], salt)  (Poseidon with 9 inputs, BN128),
+ * rendered as 0x + 64 hex chars. This is exactly the hash the official policy circuit checks
+ * (`h.out === commitment`, see src/vfy/policy-proof.ts), and what gets registered under
+ * Dashboard -> My Agents -> Edit agent before Swiss Round 1.
  * The salt is private; derive it from VFY_STRATEGY_SALT (or, failing that, the HMAC secret)
  * so it is reproducible across restarts without storing it.
  */
@@ -25,7 +27,11 @@ export async function poseidonHash(inputs: bigint[]): Promise<bigint> {
   return poseidon.F.toObject(poseidon(inputs));
 }
 
+export async function strategyCommitmentField(params: StrategyParams, salt: bigint): Promise<bigint> {
+  return poseidonHash([...strategyParamsToSignals(params), salt]);
+}
+
 export async function strategyCommitment(params: StrategyParams, salt: bigint): Promise<`0x${string}`> {
-  const h = await poseidonHash([...strategyParamsToSignals(params), salt]);
+  const h = await strategyCommitmentField(params, salt);
   return ('0x' + h.toString(16).padStart(64, '0')) as `0x${string}`;
 }

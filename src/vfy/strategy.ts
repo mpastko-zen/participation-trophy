@@ -1,39 +1,77 @@
 import type { VfyAction } from './hash.js';
 
 /**
- * Steal the VFY strategy.
+ * Steal the VFY strategy, in the shape the official policy circuit understands.
  *
- * Draft resolver (from the build guide): start 100 each, 20 simultaneous turns,
- *   EXTRACT n (n <= 10) takes up to n from the opponent's spendable balance,
- *   FORTIFY costs 2 and blocks 6 of incoming extraction that turn,
- *   HOLD does nothing.
- * Highest balance wins, so what matters is the *differential* (mine - theirs) per turn:
+ * The official circuit (build/circuits/vfy-policy-official, see src/vfy/policy-proof.ts) fixes the
+ * *family* of strategies: eight committed field elements `strategyParams[0..7]` evaluated as
+ *
+ *   if (selfBalance < params[1])                       -> FORTIFY
+ *   else if (params[3] == 1 || opponentBalance <= params[2]) -> HOLD
+ *   else                                               -> EXTRACT params[0]
+ *
+ * with params[0] in 1..10, params[3] in {0,1}, params[4..7] == 0 (reserved) and 16-bit balance
+ * comparisons. The circuit permits exactly one action per state, so `decide` below must mirror it
+ * precisely: a different move would not be provable and the turn would be scored as HOLD with a
+ * POLICY_VIOLATION penalty.
+ *
+ * Why the defaults are [10, 0, 0, 0]: under the draft resolver (start 100 each, 20 simultaneous
+ * turns, EXTRACT n <= 10 takes up to n from the opponent's spendable balance, FORTIFY costs 2 and
+ * blocks 6 of incoming extraction that turn, HOLD does nothing) the per-turn differential
+ * (mine - theirs) is
  *
  *                 opp HOLD   opp FORTIFY   opp EXTRACT
  *   me EXTRACT      +20        +10            0
  *   me FORTIFY       -2          0          -10
  *   me HOLD           0         +2          -20
  *
- * EXTRACT at the cap weakly dominates every alternative against every opponent action,
- * so the committed policy is: EXTRACT cap, except HOLD when the opponent has nothing left.
- * (If resolver v1 adds multi-turn fortification or a HOLD reserve bonus, revisit this and
- * the policy circuit together: the circuit must prove whatever this function decides.)
- *
- * The strategy is a pure function of (params, state) so that it can be expressed as a
- * circuit and the commitment can be Poseidon(params, salt).
+ * so EXTRACT at the cap weakly dominates every alternative against every opponent action. Hence
+ * fortifyBelow = 0 (never fortify) and holdWhenOpponentAtMost = 0 (HOLD only once the opponent is
+ * empty, where EXTRACT gains nothing and HOLD may earn resolver v1's reserve bonus).
+ * Resolver v1's exact numbers are frozen before scored play; if FORTIFY becomes multi-turn or cheap
+ * enough to matter, raise VFY_FORTIFY_BELOW and re-register the commitment between rounds.
  */
 
 export type ResolverConfig = { extractCap: number; fortifyCost: number; fortifyBlock: number };
 export const DRAFT_RESOLVER: ResolverConfig = { extractCap: 10, fortifyCost: 2, fortifyBlock: 6 };
 
-/** Committed strategy parameters. Field order matters: it is hashed into the commitment. */
+/** Committed strategy parameters = the circuit's strategyParams[0..3]; [4..7] are reserved zeros. */
 export type StrategyParams = {
-  extractAmount: number; // 1..extractCap
-  holdWhenOpponentEmpty: 0 | 1;
+  /** params[0]: EXTRACT amount, 1..10. The circuit requires action.amount to equal it exactly. */
+  extractAmount: number;
+  /** params[1]: FORTIFY while selfBalance < fortifyBelow. 0 = never fortify. */
+  fortifyBelow: number;
+  /** params[2]: HOLD while opponentBalance <= holdWhenOpponentAtMost. 0 = only when the opponent is empty. */
+  holdWhenOpponentAtMost: number;
+  /** params[3]: 1 = always HOLD (unless fortifying). */
+  alwaysHold: 0 | 1;
 };
 
+export const STRATEGY_PARAM_COUNT = 8;
+/** Balance comparisons in the circuit are 16-bit; thresholds above this overflow the comparator. */
+export const MAX_THRESHOLD = 0xffff;
+
+export const DEFAULT_STRATEGY: StrategyParams = { extractAmount: 10, fortifyBelow: 0, holdWhenOpponentAtMost: 0, alwaysHold: 0 };
+
+/** Clamp arbitrary (env-sourced) numbers into the domain the circuit accepts. */
+export function normalizeStrategyParams(p: Partial<StrategyParams>): StrategyParams {
+  const clamp = (v: number | undefined, lo: number, hi: number, dflt: number) =>
+    Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.trunc(v as number))) : dflt;
+  return {
+    extractAmount: clamp(p.extractAmount, 1, DRAFT_RESOLVER.extractCap, DEFAULT_STRATEGY.extractAmount),
+    fortifyBelow: clamp(p.fortifyBelow, 0, MAX_THRESHOLD, 0),
+    holdWhenOpponentAtMost: clamp(p.holdWhenOpponentAtMost, 0, MAX_THRESHOLD, 0),
+    alwaysHold: p.alwaysHold ? 1 : 0,
+  };
+}
+
+export function strategyParamsFromConfig(c: { extractAmount: number; fortifyBelow: number; holdWhenOpponentAtMost: number; alwaysHold: boolean }): StrategyParams {
+  return normalizeStrategyParams({ ...c, alwaysHold: c.alwaysHold ? 1 : 0 });
+}
+
+/** The circuit's strategyParams[8], in order. Hashed with the salt into the commitment. */
 export function strategyParamsToSignals(p: StrategyParams): bigint[] {
-  return [BigInt(p.extractAmount), BigInt(p.holdWhenOpponentEmpty), 0n, 0n];
+  return [BigInt(p.extractAmount), BigInt(p.fortifyBelow), BigInt(p.holdWhenOpponentAtMost), BigInt(p.alwaysHold), 0n, 0n, 0n, 0n];
 }
 
 export type TurnView = {
@@ -42,8 +80,10 @@ export type TurnView = {
   opponentBalance: bigint;
 };
 
+/** The one action the committed strategy permits in this state (mirrors the circuit exactly). */
 export function decide(params: StrategyParams, view: TurnView): VfyAction {
-  if (params.holdWhenOpponentEmpty === 1 && view.opponentBalance <= 0n) return { type: 'HOLD' };
+  if (view.selfBalance < BigInt(params.fortifyBelow)) return { type: 'FORTIFY' };
+  if (params.alwaysHold === 1 || view.opponentBalance <= BigInt(params.holdWhenOpponentAtMost)) return { type: 'HOLD' };
   return { type: 'EXTRACT', amount: params.extractAmount };
 }
 

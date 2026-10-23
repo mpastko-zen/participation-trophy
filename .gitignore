@@ -13,4 +13,6 @@ build/
 !build/
 !build/circuits/gatekeeper/
 !build/circuits/gatekeeper/*
+!build/circuits/vfy-policy-official/
+!build/circuits/vfy-policy-official/*
 .DS_Store

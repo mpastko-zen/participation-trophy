@@ -1,0 +1,5 @@
+Official Steal the VFY policy circuit artifacts, downloaded 2026-10-22 from
+https://agentgames.zkverify.io/circuits/ (listed at /api/circuit-info and on /build, "Circuit artifacts").
+vk_hash registered on zkVerify mainnet: 0x6c56509f1c56fd1fd4e9737f906d2220f4b95f1d507f1adf6899085bd74be047
+verification_key.json was exported locally from the zkey with snarkjs (zkey export verificationkey).
+Signal names, public-signal order and constraints recovered empirically: see src/vfy/policy-proof.ts.

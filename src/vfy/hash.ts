@@ -5,7 +5,7 @@ export type VfyAction = { type: 'HOLD' } | { type: 'FORTIFY' } | { type: 'EXTRAC
 
 export const ACTION_CODE: Record<VfyActionType, bigint> = { HOLD: 0n, FORTIFY: 1n, EXTRACT: 2n };
 
-/** Circuit version string -> integer public input. "v1-draft" -> 1 per the build guide. */
+/** Circuit version string -> integer public input. "v1" (and the older "v1-draft") -> 1 per the build guide. */
 export function circuitVersionInt(version: string): bigint {
   const m = /^v(\d+)/i.exec(version.trim());
   return m ? BigInt(m[1]!) : 1n;

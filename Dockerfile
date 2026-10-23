@@ -13,7 +13,7 @@ RUN mkdir -p /data && chown node:node /data
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
-# Circuit artifacts (run `npm run circuit:setup` before building the image, or mount them).
+# Official circuit artifacts (build/circuits/gatekeeper, build/circuits/vfy-policy-official) ship in the image.
 COPY --from=build /app/build ./build
 USER node
 EXPOSE 3000

@@ -15,7 +15,7 @@
     "test": "LOG_LEVEL=error tsx --test test/*.test.ts",
     "simulate": "tsx scripts/simulate.ts",
     "commitment": "tsx scripts/commitment.ts",
-    "circuit:setup": "bash scripts/setup-demo-circuit.sh",
+    "circuit:reconstruct": "bash scripts/reconstruct-vfy-circuit.sh",
     "kurier:register-vk": "tsx scripts/kurier-register-vk.ts"
   },
   "dependencies": {

@@ -95,7 +95,7 @@ function vfyEnvelope(mode: 'practice' | 'competition', matchId: string, turn: nu
     deadlineAt: new Date(now + 60_000).toISOString(),
     state: { selfBalance: self, opponentBalance: opp, selfFortifiedUntilTurn: null, opponentFortifiedUntilTurn: null, ...(mode === 'practice' ? { priorTurnHash: '0x' + '0'.repeat(64) } : {}) },
     ...(mode === 'competition' ? { strategyCommitment: { hash: '0x' + '7d'.repeat(32) } } : {}),
-    resolverVersion: 'v1-draft',
+    resolverVersion: 'v1',
     nonce: randomUUID(),
   };
 }
@@ -107,8 +107,8 @@ test('vfy competition turn: exact echo, EXTRACT 10, correct hash, timestamp and 
   assert.equal(r.json.matchId, matchId);
   assert.equal(r.json.turn, 3);
   assert.deepEqual(r.json.action, { type: 'EXTRACT', amount: 10 });
-  assert.equal(r.json.policyProof.circuitVersion, 'v1-draft');
-  assert.equal(r.json.policyProof.publicInputsHash, publicInputsHash({ commitment: '0x' + '7d'.repeat(32), matchId, turn: 3, selfBalance: '95', opponentBalance: '105', action: { type: 'EXTRACT', amount: 10 }, circuitVersion: 'v1-draft' }));
+  assert.equal(r.json.policyProof.circuitVersion, 'v1');
+  assert.equal(r.json.policyProof.publicInputsHash, publicInputsHash({ commitment: '0x' + '7d'.repeat(32), matchId, turn: 3, selfBalance: '95', opponentBalance: '105', action: { type: 'EXTRACT', amount: 10 }, circuitVersion: 'v1' }));
   assert.match(r.json.agentTimestamp, /^\d{4}-\d{2}-\d{2}T.*Z$/);
   assert.match(r.json.idempotencyKey, /^[0-9a-f-]{36}$/);
   assert.deepEqual(Object.keys(r.json).sort(), ['action', 'agentTimestamp', 'idempotencyKey', 'matchId', 'policyProof', 'turn']);

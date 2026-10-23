@@ -5,8 +5,10 @@ import { log } from './log.js';
 import { gatekeeperInputSchema, workBudgetMs, type GatekeeperTask, type Preflight, type VfyTurn } from './protocol.js';
 import type { Store } from './store.js';
 import { deriveSalt, strategyCommitment } from './vfy/commitment.js';
-import { amountOf, circuitVersionInt, matchIdToBigInt, publicInputsHash, ACTION_CODE, type VfyAction } from './vfy/hash.js';
-import { decide, strategyParamsToSignals, type StrategyParams } from './vfy/strategy.js';
+import { publicInputsHash, type VfyAction } from './vfy/hash.js';
+import { buildVfyCircuitInputs } from './vfy/policy-proof.js';
+import { decide, strategyParamsFromConfig, type StrategyParams } from './vfy/strategy.js';
+import { normHex as normHexCommitment } from './gatekeeper.js';
 import { buildGatekeeperCircuitInputs, deriveGatekeeperSalt } from './zk/gatekeeper-proof.js';
 import { kurierConfigured, submitAndWait } from './zk/kurier.js';
 import { artifactsAvailable, groth16Prove } from './zk/prover.js';
@@ -22,10 +24,7 @@ export class Handlers {
     private readonly config: Config,
     private readonly store: Store,
   ) {
-    this.params = {
-      extractAmount: Math.max(1, Math.min(10, config.vfy.extractAmount)),
-      holdWhenOpponentEmpty: config.vfy.holdWhenOpponentEmpty ? 1 : 0,
-    };
+    this.params = strategyParamsFromConfig(config.vfy);
     this.salt = deriveSalt(config.vfy.strategySalt || config.hmacSecret || 'dev');
     this.gatekeeperSalt = config.gatekeeper.salt || deriveGatekeeperSalt(config.vfy.strategySalt || config.hmacSecret || 'dev');
   }
@@ -134,20 +133,17 @@ export class Handlers {
     }
 
     const v = this.config.vfy;
-    if (await artifactsAvailable({ wasm: v.wasm, zkey: v.zkey })) {
+    // The circuit can only prove a turn against *our* committed strategy. If the platform froze a
+    // different commitment (stale registration), proving would just fail: answer without a proof.
+    const ours = await this.commitment();
+    const provable = normHexCommitment(commitment) === normHexCommitment(ours);
+    if (!provable) log('warn', 'vfy: frozen commitment differs from ours; re-register `npm run commitment`', { matchId: task.matchId, turn: task.turn });
+    if (provable && (await artifactsAvailable({ wasm: v.wasm, zkey: v.zkey }))) {
       const remaining = () => budget - (Date.now() - started);
-      const inputs = {
-        params: strategyParamsToSignals(this.params).map(String),
-        salt: this.salt.toString(),
-        commitment: BigInt(commitment).toString(),
-        matchId: matchIdToBigInt(task.matchId).toString(),
-        turn: String(task.turn),
-        selfBalance: selfBalance.toString(),
-        opponentBalance: opponentBalance.toString(),
-        action: ACTION_CODE[action.type].toString(),
-        amount: amountOf(action).toString(),
-        circuitVersion: circuitVersionInt(circuitVersion).toString(),
-      };
+      const inputs = buildVfyCircuitInputs(
+        { commitment, matchId: task.matchId, turn: task.turn, selfBalance, opponentBalance, action, circuitVersion },
+        { params: this.params, salt: this.salt },
+      );
       const proof = await groth16Prove({ wasm: v.wasm, zkey: v.zkey }, inputs, remaining());
       if (proof) {
         if (v.includeProofInResponse) {
@@ -186,7 +182,7 @@ export class Handlers {
       matchId: payload.matchId,
       turn: payload.turn,
       action: { type: 'HOLD' },
-      policyProof: { circuitVersion: 'v1-draft', publicInputsHash: '0x' + '0'.repeat(64) },
+      policyProof: { circuitVersion: 'v1', publicInputsHash: '0x' + '0'.repeat(64) },
       ...(payload.mode === 'practice' ? {} : { agentTimestamp: new Date().toISOString(), idempotencyKey: randomUUID() }),
     };
   }
