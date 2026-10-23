@@ -7,6 +7,18 @@ import type { Store } from './store.js';
 
 export type AgentResponse = { status: number; body: string; headers: Record<string, string> };
 
+/** Classify a signature header's encoding without revealing it. */
+export function describeSignature(sig: string | undefined): string {
+  if (!sig) return 'missing';
+  const s = sig.trim();
+  if (/^[0-9a-f]{64}$/.test(s)) return 'hex64';
+  if (/^[0-9A-F]{64}$/.test(s)) return 'HEX64';
+  if (/^sha256=[0-9a-fA-F]{64}$/.test(s)) return 'sha256=hex64';
+  if (/^(t=\d+,)?v1=[0-9a-fA-F]{64}$/.test(s)) return 'stripe-style';
+  if (/^[A-Za-z0-9+/_-]{43}=?$/.test(s)) return 'base64-32';
+  return `other(len=${s.length},prefix=${s.slice(0, 6).replace(/[0-9a-zA-Z]/g, 'x')})`;
+}
+
 /**
  * Transport-agnostic request handler: raw body in, signed JSON out.
  * Order of operations is the one the rules require:
@@ -29,7 +41,8 @@ export class Agent {
 
     if (this.config.hmacSecret) {
       if (!verify(raw, sig, this.config.hmacSecret)) {
-        log('warn', 'rejected request with bad signature', { hasSignature: Boolean(sig), bytes: raw.length });
+        // Shape only (never the value): enough to tell a wrong secret from a different wire encoding.
+        log('warn', 'rejected request with bad signature', { hasSignature: Boolean(sig), sigShape: describeSignature(sig), bytes: raw.length });
         return this.reply(401, { error: 'invalid signature' });
       }
     } else if (!this.config.allowUnsigned) {
